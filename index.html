@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sunshine — ระบบจัดออเดอร์และโลเคชั่น</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- เมนูหลักด้านซ้าย -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <span class="brand-mark">Sunshine</span>
+      <span class="brand-sub">คลังสินค้า</span>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item active" data-mode="purchase" onclick="setMode('purchase')">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/><path d="M3 4h2l2.2 11.4a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.6L21 8H6"/></svg>
+        <span>ใบสั่งซื้อล่วงหน้า</span>
+      </button>
+      <button class="nav-item" data-mode="best" onclick="setMode('best')">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18l5-6 4 3 6-8"/><path d="M14 6h5v5"/></svg>
+        <span>สินค้าขายดี ABC</span>
+      </button>
+    </nav>
+
+    <button class="nav-upload" onclick="openUploadPanel()">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M8 8l4-4 4 4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+      <span>นำเข้าข้อมูล</span>
+    </button>
+  </aside>
+
+  <!-- เนื้อหาหลัก -->
+  <div class="main">
+    <header class="topbar">
+      <button class="menu-toggle" onclick="toggleSidebar()" aria-label="เมนู">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <h1 id="pageTitle">ใบสั่งซื้อล่วงหน้า</h1>
+
+      <div class="topbar-actions">
+        <div class="search-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input type="text" id="search" placeholder="ค้นหา SKU..." oninput="filterTable()">
+        </div>
+        <button class="icon-btn" onclick="refresh()" title="รีเฟรชข้อมูล">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8 8 0 1 0 6.3 17.7"/><path d="M20 5v6h-6"/></svg>
+        </button>
+        <button class="icon-btn" onclick="exportCSV()" title="ดาวน์โหลด CSV">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7.5 11 12 15.5 16.5 11"/><path d="M4 18v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1"/></svg>
+        </button>
+        <button class="icon-btn" onclick="handlePrint()" title="พิมพ์">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="6" y="13" width="12" height="8"/><path d="M4 9h16a1 1 0 0 1 1 1v6h-4M3 16v-6a1 1 0 0 1 1-1"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="status-bar">
+      <span id="status" class="muted">พร้อมใช้งาน</span>
+    </div>
+
+    <main id="output">
+      <p class="hint">กำลังโหลดข้อมูล...</p>
+    </main>
+
+    <div id="printChecklist" class="print-checklist"></div>
+  </div>
+
+  <!-- แผงอัปโหลด (เลื่อนออกด้านข้าง ไม่บังหน้ารายงานหลัก) -->
+  <div class="overlay" id="overlay" onclick="closeUploadPanel()"></div>
+  <aside class="upload-panel" id="uploadPanel">
+    <div class="panel-head">
+      <h2>นำเข้าข้อมูล</h2>
+      <button class="icon-btn" onclick="closeUploadPanel()" aria-label="ปิด">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <section class="uploader">
+      <div class="uploader-tag uploader-tag-daily">ใช้วันละครั้ง</div>
+      <h3>ยอดขายย้อนหลังและสต๊อก</h3>
+      <p class="uploader-desc">เขียนทับข้อมูลเดิมทั้งหมดในชีต 3M และ ST</p>
+      <div class="uprow">
+        <label>ยอดขายย้อนหลัง → 3M <span class="hint-inline">(เลือกได้หลายไฟล์)</span></label>
+        <input type="file" id="f3m" accept=".xlsx,.xls,.csv" multiple>
+      </div>
+      <div class="uprow">
+        <label>สต๊อกและตำแหน่ง → ST <span class="hint-inline">(เลือกได้หลายไฟล์)</span></label>
+        <input type="file" id="fst" accept=".xlsx,.xls,.csv" multiple>
+      </div>
+      <button class="primary" onclick="uploadMain()">อัปโหลดและเขียนทับข้อมูล</button>
+      <div id="uplog-main" class="uplog"></div>
+    </section>
+  </aside>
+
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
