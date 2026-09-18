@@ -326,6 +326,60 @@ tbody tr:hover { background: var(--navy-tint); }
 }
 .thresh-apply:hover { background: var(--navy-dark); }
 
+/* ---------- Multiselect filter dropdown ---------- */
+
+.multiselect { position: relative; }
+
+.multiselect-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13.5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: .12s;
+  white-space: nowrap;
+}
+.multiselect-btn:hover { border-color: var(--navy); }
+
+.ms-caret { font-size: 10px; color: var(--ink-muted); }
+
+.multiselect-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 190px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 24px rgba(15, 23, 34, .14);
+  padding: 6px;
+  z-index: 30;
+}
+.multiselect-panel.open { display: block; }
+
+.ms-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--ink);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.ms-option:hover { background: var(--navy-tint); }
+.ms-option input { margin: 0; cursor: pointer; }
+
 .rec-none { color: var(--ink-muted); font-weight: 600; }
 .rec-good { color: var(--success); font-weight: 700; }
 .rec-stock { color: var(--amber-dark); font-weight: 700; }
