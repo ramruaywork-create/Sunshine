@@ -15,6 +15,7 @@ let CACHE = null;
 let currentMode = "purchase";
 let PENDING_CHECKLIST = { title: "", items: [] }; // ตั้งไว้ตอน render แล้วค่อยใช้จริงตอนกดพิมพ์
 let LOAD_TOKEN = 0; // เพิ่มทุกครั้งที่เปลี่ยนหน้า ใช้กันคำขอเก่าเขียนทับคำขอใหม่
+let ROW_SEARCH_CACHE = []; // ข้อความค้นหาต่อแถว (lowercase) เตรียมไว้ตอนสร้างตาราง กันไม่ต้องอ่านจาก DOM ซ้ำตอนพิมพ์ค้นหา (ช้ามากถ้าตารางมีหลักพันแถว)
 
 const MODE_TITLES = {
   purchase: "ใบสั่งซื้อล่วงหน้า",
@@ -285,11 +286,13 @@ function renderPurchase(hist, st, skuNames) {
   let body = "";
   let gradeA = 0;
   let orderTotal = 0;
+  ROW_SEARCH_CACHE = [];
   urgent.forEach(function (i) {
     if (i.grade === "A") gradeA++;
     orderTotal += i.order;
     const name = skuNames[i.sku] || "-";
     const rec = bestRecommend(i.sold, th.a, th.b);
+    ROW_SEARCH_CACHE.push((i.sku + " " + name).toLowerCase());
     body += '<tr class="' + (i.cover <= CFG.LEAD_DAYS ? "row-warn" : "") +
       '" data-brand="' + name.toUpperCase() + '" data-grade="' + i.grade + '" data-rec="' + rec.cls + '">' +
       '<td class="g' + i.grade + '">' + i.grade + '</td>' +
@@ -305,20 +308,17 @@ function renderPurchase(hist, st, skuNames) {
 
   const filterBarHtml =
     '<div class="thresh-bar">' +
-      '<label>แบรนด์ <select id="purchBrand" onchange="applyPurchaseFilters()">' +
-        '<option value="">ทั้งหมด</option>' +
-        BRANDS.map(function (b) { return '<option value="' + b + '">' + b + '</option>'; }).join("") +
-      '</select></label>' +
-      '<label>เกรด <select id="purchGrade" onchange="applyPurchaseFilters()">' +
-        '<option value="">ทั้งหมด</option>' +
-        '<option value="A">A</option><option value="B">B</option><option value="C">C</option>' +
-      '</select></label>' +
-      '<label>คำแนะนำ <select id="purchRec" onchange="applyPurchaseFilters()">' +
-        '<option value="">ทั้งหมด</option>' +
-        '<option value="rec-none">ขายไม่ดี</option>' +
-        '<option value="rec-good">ขายดี</option>' +
-        '<option value="rec-stock">ควรสต็อก</option>' +
-      '</select></label>' +
+      buildMultiselect("purchBrand", "แบรนด์", BRANDS.map(function (b) { return { value: b, text: b }; })) +
+      buildMultiselect("purchGrade", "เกรด", [
+        { value: "A", text: "A" },
+        { value: "B", text: "B" },
+        { value: "C", text: "C" }
+      ]) +
+      buildMultiselect("purchRec", "คำแนะนำ", [
+        { value: "rec-none", text: "ขายไม่ดี" },
+        { value: "rec-good", text: "ขายดี" },
+        { value: "rec-stock", text: "ควรสต็อก" }
+      ]) +
     '</div>';
 
   document.getElementById("output").innerHTML =
@@ -332,22 +332,94 @@ function renderPurchase(hist, st, skuNames) {
   setPendingChecklist("ใบสั่งซื้อล่วงหน้า", checklistItems);
 }
 
-// รวมผลตัวกรอง แบรนด์ + เกรด + คำแนะนำ เข้าด้วยกัน (ต้องผ่านทุกเงื่อนไขที่เลือกไว้ถึงจะโชว์)
-function applyPurchaseFilters() {
-  const brand = (document.getElementById("purchBrand").value || "").toUpperCase();
-  const grade = document.getElementById("purchGrade").value || "";
-  const rec = document.getElementById("purchRec").value || "";
+// สร้าง dropdown แบบติ๊กเลือกได้หลายตัวเลือก (checkbox) — คืน HTML ของปุ่ม + แผงตัวเลือก
+// options: [{value, text}]  ไม่ติ๊กอะไรเลย = ถือว่า "ทั้งหมด" ไม่กรองด้วยตัวนี้
+function buildMultiselect(id, label, options) {
+  const opts = options.map(function (o) {
+    return '<label class="ms-option"><input type="checkbox" value="' + o.value +
+      '" onchange="onMultiselectChange(\'' + id + '\', \'' + label + '\')"> ' + o.text + '</label>';
+  }).join("");
+
+  return '<div class="multiselect" id="' + id + 'Wrap">' +
+    '<button type="button" class="multiselect-btn" id="' + id + 'Btn" onclick="toggleMultiselect(\'' + id + '\')">' +
+      label + ': ทั้งหมด <span class="ms-caret">▾</span>' +
+    '</button>' +
+    '<div class="multiselect-panel" id="' + id + 'Panel">' + opts + '</div>' +
+  '</div>';
+}
+
+// เปิด/ปิดแผงตัวเลือก ปิดแผงอื่นที่เปิดค้างอยู่ก่อนเสมอ (เปิดได้ทีละอัน)
+function toggleMultiselect(id) {
+  const panel = document.getElementById(id + "Panel");
+  if (!panel) return;
+  const willOpen = !panel.classList.contains("open");
+  document.querySelectorAll(".multiselect-panel.open").forEach(function (p) { p.classList.remove("open"); });
+  if (willOpen) panel.classList.add("open");
+}
+
+// คลิกนอกกล่อง multiselect ที่ไหนก็ได้ ให้ปิดแผงที่เปิดค้างอยู่ทั้งหมด
+document.addEventListener("click", function (e) {
+  if (e.target.closest(".multiselect")) return;
+  document.querySelectorAll(".multiselect-panel.open").forEach(function (p) { p.classList.remove("open"); });
+});
+
+function getMultiselectChecked(id) {
+  const panel = document.getElementById(id + "Panel");
+  if (!panel) return [];
+  return Array.prototype.filter.call(
+    panel.querySelectorAll("input[type=checkbox]"),
+    function (cb) { return cb.checked; }
+  );
+}
+
+function getMultiselectValues(id) {
+  return getMultiselectChecked(id).map(function (cb) { return cb.value; });
+}
+
+// อัปเดตข้อความบนปุ่มให้โชว์ว่าติ๊กอะไรอยู่บ้าง (ไม่เกิน 2 ชื่อ ถ้าเกินให้โชว์เป็นจำนวนแทน)
+function updateMultiselectLabel(id, label) {
+  const checked = getMultiselectChecked(id);
+  const btn = document.getElementById(id + "Btn");
+  if (!btn) return;
+  const caret = '<span class="ms-caret">▾</span>';
+
+  if (checked.length === 0) {
+    btn.innerHTML = label + ": ทั้งหมด " + caret;
+  } else if (checked.length <= 2) {
+    const texts = checked.map(function (cb) { return cb.closest("label").textContent.trim(); });
+    btn.innerHTML = label + ": " + texts.join(", ") + " " + caret;
+  } else {
+    btn.innerHTML = label + " (" + checked.length + " รายการ) " + caret;
+  }
+}
+
+function onMultiselectChange(id, label) {
+  updateMultiselectLabel(id, label);
+  applyAllFilters();
+}
+
+// รวมทุกเงื่อนไข: ช่องค้นหา + แบรนด์ + เกรด + คำแนะนำ เข้าด้วยกันในฟังก์ชันเดียว
+// ต้องผ่านทุกเงื่อนไขถึงจะโชว์แถวนั้น (แต่ภายในหมวดเดียวกัน เช่นติ๊กหลายแบรนด์ ผ่านแบรนด์ใดแบรนด์หนึ่งพอ)
+// ใช้ฟังก์ชันเดียวทั้งตอนพิมพ์ค้นหาและตอนติ๊กตัวกรอง กันไม่ให้ทั้งสองฝั่งเขียนทับ display ของกันและกัน
+function applyAllFilters() {
   const tbody = document.getElementById("tbody");
   if (!tbody) return;
 
-  Array.prototype.forEach.call(tbody.rows, function (row) {
+  const searchEl = document.getElementById("search");
+  const query = searchEl ? searchEl.value.toLowerCase() : "";
+  const brands = getMultiselectValues("purchBrand").map(function (b) { return b.toUpperCase(); });
+  const grades = getMultiselectValues("purchGrade");
+  const recs = getMultiselectValues("purchRec");
+
+  Array.prototype.forEach.call(tbody.rows, function (row, idx) {
     const rowBrand = row.dataset.brand || "";
     const rowGrade = row.dataset.grade || "";
     const rowRec = row.dataset.rec || "";
-    const passBrand = !brand || rowBrand.indexOf(brand) > -1;
-    const passGrade = !grade || rowGrade === grade;
-    const passRec = !rec || rowRec === rec;
-    row.style.display = (passBrand && passGrade && passRec) ? "" : "none";
+    const passBrand = brands.length === 0 || brands.some(function (b) { return rowBrand.indexOf(b) > -1; });
+    const passGrade = grades.length === 0 || grades.indexOf(rowGrade) > -1;
+    const passRec = recs.length === 0 || recs.indexOf(rowRec) > -1;
+    const passSearch = !query || (ROW_SEARCH_CACHE[idx] || "").indexOf(query) > -1;
+    row.style.display = (passBrand && passGrade && passRec && passSearch) ? "" : "none";
   });
 }
 
@@ -396,12 +468,15 @@ function renderBestSellers(hist, skuNames) {
   const th = getBestThresholds();
 
   let body = "";
+  ROW_SEARCH_CACHE = [];
   list.forEach(function (i, idx) {
     const rec = bestRecommend(i.sold, th.a, th.b);
+    const name = skuNames[i.sku] || "-";
+    ROW_SEARCH_CACHE.push((i.sku + " " + name).toLowerCase());
     body += '<tr>' +
       '<td class="num">' + (idx + 1) + '</td>' +
       '<td>' + i.sku + '</td>' +
-      '<td>' + (skuNames[i.sku] || "-") + '</td>' +
+      '<td>' + name + '</td>' +
       '<td class="num">' + i.sold + '</td>' +
       '<td class="num">' + i.cum.toFixed(1) + '%</td>' +
       '<td class="g' + i.grade + '">' + i.grade + '</td>' +
@@ -432,13 +507,10 @@ function renderBestSellers(hist, skuNames) {
   setPendingChecklist("", []); // หน้านี้ไม่ใช่ checklist ให้พิมพ์ตารางปกติแทน
 }
 
+let SEARCH_DEBOUNCE_TIMER = null;
 function filterTable() {
-  const q = document.getElementById("search").value.toLowerCase();
-  const tbody = document.getElementById("tbody");
-  if (!tbody) return;
-  Array.prototype.forEach.call(tbody.rows, function (row) {
-    row.style.display = row.innerText.toLowerCase().indexOf(q) > -1 ? "" : "none";
-  });
+  clearTimeout(SEARCH_DEBOUNCE_TIMER);
+  SEARCH_DEBOUNCE_TIMER = setTimeout(applyAllFilters, 120);
 }
 
 function exportCSV() {
@@ -447,7 +519,7 @@ function exportCSV() {
   let csv = "";
   Array.prototype.forEach.call(tbl.rows, function (row) {
     const cells = Array.prototype.map.call(row.cells, function (c) {
-      return '"' + c.innerText.replace(/"/g, '""') + '"';
+      return '"' + c.textContent.replace(/"/g, '""') + '"';
     });
     csv += cells.join(",") + "\n";
   });
@@ -456,6 +528,14 @@ function exportCSV() {
   a.href = URL.createObjectURL(blob);
   a.download = "report_" + new Date().toISOString().slice(0, 10) + ".csv";
   a.click();
+}
+
+// ดาวน์โหลดตารางเป็นไฟล์ .xlsx จริงๆ (ใช้ SheetJS แปลง <table> ในหน้าเว็บตรงๆ) เปิดด้วย Excel ได้เลย
+function exportExcel() {
+  const tbl = document.querySelector("table");
+  if (!tbl) { alert("ยังไม่มีข้อมูลให้ดาวน์โหลด"); return; }
+  const wb = XLSX.utils.table_to_book(tbl, { sheet: "Report" });
+  XLSX.writeFile(wb, "report_" + new Date().toISOString().slice(0, 10) + ".xlsx");
 }
 
 function readSheetFile(file) {
